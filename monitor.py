@@ -14,6 +14,13 @@ WATCHLIST = [
     "Lending Indicators",
     "Consumer Price Index",
     "Dwellings",
+    "Average Weekly Earnings",
+    "Gross Domestic Product",
+    "Business Indicators",
+    "Labour Force",
+    "Household Spending",
+    "Producer Price Index",
+    "Wage Price Index",
     "Property Price"
 ]
 
