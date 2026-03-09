@@ -1,20 +1,21 @@
-import os, requests, html, sys
+import os, requests, html
+from bs4 import BeautifulSoup
 from datetime import datetime
 
 # === 🎛️ CONFIG ===
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-# Dataflows for your property/construction interests
-# These IDs are standard across the ABS system
-TARGET_DATAFLOWS = {
-    "BUILDING_APPROV": "Building Approvals",
-    "RES_PROP_PRICE": "Residential Property Price Indexes",
-    "CONSTRUCTION": "Construction Work Done",
-    "CPI": "Consumer Price Index",
-    "LENDING": "Lending Indicators",
-    "RETAIL": "Retail Trade"
-}
+# Keywords for your property/construction interest
+WATCHLIST = [
+    "Building Activity", 
+    "Building Approvals", 
+    "Construction Work Done", 
+    "Lending Indicators",
+    "Consumer Price Index",
+    "Dwellings",
+    "Property Price"
+]
 
 def log(msg):
     print(f"📊 [ABS LOG] {msg}", flush=True)
@@ -24,7 +25,7 @@ def send_telegram(text):
         log("Missing Telegram Secrets")
         return
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    payload = {"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"}
+    payload = {"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML", "disable_web_page_preview": True}
     try:
         r = requests.post(url, json=payload, timeout=30)
         return r.status_code == 200
@@ -32,51 +33,51 @@ def send_telegram(text):
         log(f"Telegram Error: {e}")
         return False
 
-def check_abs():
-    log("Checking ABS Data API...")
-    # New reliable endpoint for data discovery
-    api_url = "https://data.api.abs.gov.au/rest/dataflow/ABS/all?detail=allstubs"
-    headers = {"Accept": "application/json"}
+def check_abs_calendar():
+    log("Scraping ABS Release Calendar...")
+    # This page shows everything released today and recently
+    url = "https://www.abs.gov.au/release-calendar/latest-releases"
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
     
-    updates = []
     try:
-        r = requests.get(api_url, headers=headers, timeout=30)
+        r = requests.get(url, headers=headers, timeout=20)
         r.raise_for_status()
-        data = r.json()
+        soup = BeautifulSoup(r.content, "html.parser")
         
-        # Dig into the SDMX-JSON structure to find our dataflows
-        dataflows = data.get('data', {}).get('dataflows', [])
-        
-        for df in dataflows:
-            df_id = df.get('id')
-            if df_id in TARGET_DATAFLOWS:
-                name = TARGET_DATAFLOWS[df_id]
-                version = df.get('version', '1.0.0')
-                # Construct a clean link to the ABS website for that topic
-                link = f"https://www.abs.gov.au/statistics/search?search_text={df_id}"
+        updates = []
+        # ABS release calendar items are typically in <a> tags within specific divs
+        for link_tag in soup.find_all('a', href=True):
+            text = link_tag.get_text().strip()
+            
+            # Check if any of our watchlist keywords are in the link text
+            if any(word.lower() in text.lower() for word in WATCHLIST):
+                href = link_tag['href']
+                full_url = f"https://www.abs.gov.au{href}" if href.startswith('/') else href
                 
-                updates.append(
-                    f"• <b>{name}</b> ({df_id})\n"
-                    f"🏷️ Version: {version}\n"
-                    f"🔗 <a href='{link}'>View Release</a>"
-                )
+                # Avoid adding the same link twice
+                entry = f"• <b>{html.escape(text)}</b>\n🔗 {full_url}"
+                if entry not in updates:
+                    updates.append(entry)
         
         return updates
     except Exception as e:
-        log(f"ABS API Error: {e}")
+        log(f"Scraping Error: {e}")
         return []
 
 def main():
-    log("🚀 Script Started")
-    results = check_abs()
+    log("🚀 ABS Monitor Started")
+    results = check_abs_calendar()
     
     if results:
         header = f"📈 <b>ABS Property & Construction Update</b>\n"
-        header += f"<i>Checked: {datetime.now().strftime('%d %b %Y %H:%M')}</i>\n\n"
-        send_telegram(header + "\n\n".join(results))
-        log(f"✅ Sent {len(results)} updates.")
+        header += f"<i>Checked: {datetime.now().strftime('%d %b %Y')}</i>\n\n"
+        
+        # Limit to top 15 results to keep message clean
+        message = header + "\n\n".join(results[:15])
+        send_telegram(message)
+        log(f"✅ Sent {len(results)} updates to Telegram.")
     else:
-        log("🧐 No matching dataflows found.")
+        log("🧐 No relevant updates found on the calendar today.")
 
 if __name__ == "__main__":
     main()
