@@ -2,11 +2,7 @@ name: ABS Data Monitor
 
 on:
   schedule:
-    # 00:45 UTC is 11:45 AM AEDT (Summer) / 10:45 AM AEST (Winter)
-    # This runs every Monday (1) and Wednesday (3)
-    - cron: '45 0 * * 1,3'
-  
-  # This line enables the "Run workflow" button in GitHub Actions
+    - cron: '45 0 * * 1,3'  # 11:45 AM AEDT Mon/Wed
   workflow_dispatch:
 
 jobs:
@@ -18,10 +14,11 @@ jobs:
         with:
           python-version: '3.11'
       
+      # FIX: Added beautifulsoup4 here
       - name: Install dependencies
-        run: pip install requests
+        run: pip install requests beautifulsoup4
         
-      - name: Run ABS Monitor
+      - name: Run Monitor
         run: python monitor.py
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
