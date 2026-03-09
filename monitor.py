@@ -1,91 +1,82 @@
-import os
-import requests
-import time
-import html
+import os, requests, html, sys
 from datetime import datetime
 
-# === CONFIG ===
+# === 🎛️ CONFIG ===
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-# The ABS Indicator API Endpoint
-ABS_API_URL = "https://api.abs.gov.au/indicators/v1/indicators"
-
-# Keywords for your specific property/construction interest
-WATCHLIST = [
-    "Building Activity", 
-    "Building Approvals", 
-    "Construction Work Done", 
-    "Lending Indicators",
-    "Consumer Price Index",
-    "Residential Property Price"
-]
+# Dataflows for your property/construction interests
+# These IDs are standard across the ABS system
+TARGET_DATAFLOWS = {
+    "BUILDING_APPROV": "Building Approvals",
+    "RES_PROP_PRICE": "Residential Property Price Indexes",
+    "CONSTRUCTION": "Construction Work Done",
+    "CPI": "Consumer Price Index",
+    "LENDING": "Lending Indicators",
+    "RETAIL": "Retail Trade"
+}
 
 def log(msg):
     print(f"📊 [ABS LOG] {msg}", flush=True)
 
 def send_telegram(text):
     if not TELEGRAM_TOKEN or not CHAT_ID:
-        log("Missing Telegram Credentials")
+        log("Missing Telegram Secrets")
         return
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"}
-    r = requests.post(url, json=payload, timeout=30)
-    return r.status_code == 200
-
-def check_abs_indicators():
-    log("Fetching ABS Indicators...")
     try:
-        # ABS API returns a list of all available indicators
-        response = requests.get(ABS_API_URL, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-        
-        found_updates = []
-        
-        # The API usually returns a list under 'data' or similar key
-        # Adjust based on actual JSON structure of the v1/indicators endpoint
-        indicators = data.get('data', [])
-        
-        for item in indicators:
-            name = item.get('indicator_name', '')
-            last_update = item.get('last_updated', 'Unknown')
-            
-            # Filter for your specific watchlist
-            if any(word.lower() in name.lower() for word in WATCHLIST):
-                # Clean up the name for display
-                safe_name = html.escape(name)
-                # ABS links usually follow a pattern based on indicator ID
-                link = f"https://www.abs.gov.au/statistics/economy/price-indexes-and-inflation/{item.get('id', '')}"
-                
-                found_updates.append(
-                    f"• <b>{safe_name}</b>\n"
-                    f"📅 Updated: {last_update}\n"
-                    f"🔗 <a href='{link}'>View Full Release</a>"
-                )
-
-        return found_updates
+        r = requests.post(url, json=payload, timeout=30)
+        return r.status_code == 200
     except Exception as e:
-        log(f"API Error: {e}")
+        log(f"Telegram Error: {e}")
+        return False
+
+def check_abs():
+    log("Checking ABS Data API...")
+    # New reliable endpoint for data discovery
+    api_url = "https://data.api.abs.gov.au/rest/dataflow/ABS/all?detail=allstubs"
+    headers = {"Accept": "application/json"}
+    
+    updates = []
+    try:
+        r = requests.get(api_url, headers=headers, timeout=30)
+        r.raise_for_status()
+        data = r.json()
+        
+        # Dig into the SDMX-JSON structure to find our dataflows
+        dataflows = data.get('data', {}).get('dataflows', [])
+        
+        for df in dataflows:
+            df_id = df.get('id')
+            if df_id in TARGET_DATAFLOWS:
+                name = TARGET_DATAFLOWS[df_id]
+                version = df.get('version', '1.0.0')
+                # Construct a clean link to the ABS website for that topic
+                link = f"https://www.abs.gov.au/statistics/search?search_text={df_id}"
+                
+                updates.append(
+                    f"• <b>{name}</b> ({df_id})\n"
+                    f"🏷️ Version: {version}\n"
+                    f"🔗 <a href='{link}'>View Release</a>"
+                )
+        
+        return updates
+    except Exception as e:
+        log(f"ABS API Error: {e}")
         return []
 
 def main():
-    updates = check_abs_indicators()
+    log("🚀 Script Started")
+    results = check_abs()
     
-    if updates:
+    if results:
         header = f"📈 <b>ABS Property & Construction Update</b>\n"
-        header += f"<i>Checked at: {datetime.now().strftime('%d %b %Y %H:%M')}</i>\n\n"
-        
-        full_message = header + "\n\n".join(updates)
-        
-        # Check if the message is too long for Telegram
-        if len(full_message) > 4000:
-            full_message = full_message[:3900] + "\n\n... (Truncated)"
-            
-        send_telegram(full_message)
-        log("✅ Update sent to Telegram")
+        header += f"<i>Checked: {datetime.now().strftime('%d %b %Y %H:%M')}</i>\n\n"
+        send_telegram(header + "\n\n".join(results))
+        log(f"✅ Sent {len(results)} updates.")
     else:
-        log("No matching indicators found today.")
+        log("🧐 No matching dataflows found.")
 
 if __name__ == "__main__":
     main()
