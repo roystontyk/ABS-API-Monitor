@@ -1,6 +1,10 @@
 name: ABS Data Monitor
 
 on:
+# 🔴 NEW: This allows the iPhone/Orchestrator to trigger this repo
+  repository_dispatch:
+    types: [trigger-all-repos]
+    
   schedule:
     - cron: '45 0 * * 1,3'  # 11:45 AM AEDT Mon/Wed
   workflow_dispatch:
