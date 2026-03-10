@@ -5,9 +5,9 @@ on:
   repository_dispatch:
     types: [trigger-all-repos]
     
+  # Standard daily schedule (e.g., 7:30 AM Sydney/Brisbane time)
   schedule:
-    - cron: '45 0 * * 1,3'  # 11:45 AM AEDT Mon/Wed
-  workflow_dispatch:
+    - cron: '30 21 * * *'
 
 jobs:
   check-abs:
