@@ -7,7 +7,10 @@ on:
     
   # Standard daily schedule (e.g., 7:30 AM Sydney/Brisbane time)
   schedule:
-    - cron: '30 21 * * *'
+    - cron: '30 21 * * *' 
+    
+  # Manual trigger button for your iPhone Shortcut
+  workflow_dispatch:
 
 jobs:
   check-abs:
