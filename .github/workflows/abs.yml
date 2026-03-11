@@ -1,11 +1,12 @@
 name: ABS Data Monitor
 
 on:
-# 🔴 NEW: This allows the iPhone/Orchestrator to trigger this repo
+  # Allows the iPhone/Orchestrator to trigger this repo
   repository_dispatch:
     types: [trigger-all-repos]
     
-  # Standard daily schedule (e.g., 7:30 AM Sydney/Brisbane time)
+  # Runs at 8:30 AM Melbourne Time (AEDT)
+  # (30 21 UTC = 8:30 AM AEDT)
   schedule:
     - cron: '30 21 * * *' 
     
@@ -17,11 +18,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       
-      # FIX: Added beautifulsoup4 here
       - name: Install dependencies
         run: pip install requests beautifulsoup4
         
@@ -30,3 +32,5 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          # Standardizes the environment to Melbourne time
+          TZ: 'Australia/Melbourne'
