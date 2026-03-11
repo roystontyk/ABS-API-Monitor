@@ -1,6 +1,6 @@
 import os, requests, html
 from bs4 import BeautifulSoup
-from datetime import datetime
+from datetime import datetime, timedelta, timezone # Added timedelta and timezone
 
 # === 🎛️ CONFIG ===
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -42,7 +42,6 @@ def send_telegram(text):
 
 def check_abs_calendar():
     log("Scraping ABS Release Calendar...")
-    # This page shows everything released today and recently
     url = "https://www.abs.gov.au/release-calendar/latest-releases"
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
     
@@ -52,16 +51,13 @@ def check_abs_calendar():
         soup = BeautifulSoup(r.content, "html.parser")
         
         updates = []
-        # ABS release calendar items are typically in <a> tags within specific divs
         for link_tag in soup.find_all('a', href=True):
             text = link_tag.get_text().strip()
             
-            # Check if any of our watchlist keywords are in the link text
             if any(word.lower() in text.lower() for word in WATCHLIST):
                 href = link_tag['href']
                 full_url = f"https://www.abs.gov.au{href}" if href.startswith('/') else href
                 
-                # Avoid adding the same link twice
                 entry = f"• <b>{html.escape(text)}</b>\n🔗 {full_url}"
                 if entry not in updates:
                     updates.append(entry)
@@ -76,10 +72,14 @@ def main():
     results = check_abs_calendar()
     
     if results:
-        header = f"📈 <b>ABS Property & Construction Update</b>\n"
-        header += f"<i>Checked: {datetime.now().strftime('%d %b %Y')}</i>\n\n"
+        # --- AMENDED: Force Melbourne Time (UTC+11) ---
+        melbourne_tz = timezone(timedelta(hours=11))
+        today_melb = datetime.now(melbourne_tz)
         
-        # Limit to top 15 results to keep message clean
+        header = f"📈 <b>ABS Property & Construction Update</b>\n"
+        header += f"<i>Checked: {today_melb.strftime('%d %b %Y')}</i>\n\n"
+        # ----------------------------------------------
+        
         message = header + "\n\n".join(results[:15])
         send_telegram(message)
         log(f"✅ Sent {len(results)} updates to Telegram.")
